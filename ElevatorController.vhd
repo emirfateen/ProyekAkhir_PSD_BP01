@@ -39,7 +39,7 @@ ARCHITECTURE Behavioral OF ElevatorController IS
     CONSTANT EMERGENCY_LIGHT_DELAY : INTEGER := 10; -- Emergency light duration (adjust as needed)
     CONSTANT WEIGHT_SENSOR_THRESHOLD : INTEGER := 100; -- Maximum allowable load (adjust as needed)
 
-    SIGNAL door_timer : INTEGER := 0; -- Timer for door open/close duration
+    SIGNAL door_timer : INTEGER := 5; -- Timer for door open/close duration
     SIGNAL emergency_light_state : STD_LOGIC := '0'; -- state type of emergency light
     SIGNAL elevator_position : STD_LOGIC_VECTOR(2 DOWNTO 0) := (OTHERS => '0'); -- 8 floors
 
@@ -75,13 +75,20 @@ BEGIN
         -- Default next state
         next_state <= current_state;
 
+        IF door_timer = 0 THEN
+            door_timer <= DOOR_DELAY;
+        END IF;
+
         IF reset = '1' THEN
             current_state <= IDLE;
-            door_timer <= 0;
+            door_timer <= 5;
             emergency_light_state <= '0';
 
         ELSIF rising_edge(clk) THEN
             current_state <= next_state;
+            IF emergency_light_state = '1' THEN
+                door_timer <= EMERGENCY_LIGHT_DELAY;
+            END IF;
             IF enable_key = '1' THEN
                 elevator_enabled <= NOT elevator_enabled; -- Toggle enable/disable state
             END IF;
@@ -90,8 +97,9 @@ BEGIN
         -- state type machine logic
         CASE current_state IS
             WHEN IDLE =>
+                elevator_status <= "00";
                 floor_request_internal <= floor_request;
-                FOR i IN 0 TO NUM_FLOORS-1 LOOP
+                FOR i IN 0 TO NUM_FLOORS - 1 LOOP
                     IF floor_request_internal(i) = '1' THEN
                         -- Set encoder_input_temp based on the bit position
                         CASE i IS
@@ -128,6 +136,7 @@ BEGIN
 
             WHEN MOVE_UP =>
                 movingUp <= '1';
+                elevator_status <= "01";
                 IF encoded_floor_request = elevator_position THEN
                     next_state <= OPEN_DOOR;
                 ELSE
@@ -147,6 +156,7 @@ BEGIN
 
             WHEN MOVE_DOWN =>
                 movingDown <= '1';
+                elevator_status <= "01";
                 IF encoded_floor_request = elevator_position THEN
                     next_state <= OPEN_DOOR;
                 ELSE
@@ -166,16 +176,16 @@ BEGIN
 
             WHEN OPEN_DOOR =>
                 openingDoor <= '1';
-                door_timer <= door_timer + 1;
-                IF door_timer >= DOOR_DELAY THEN
+                door_timer <= door_timer - 1;
+                IF door_timer = 0 THEN
                     next_state <= CLOSE_DOOR;
-                    door_timer <= 0;
+                    door_timer <= 5;
                 END IF;
 
             WHEN CLOSE_DOOR =>
                 closingDoor <= '1';
-                door_timer <= door_timer + 1;
-                IF door_timer >= DOOR_DELAY THEN
+                door_timer <= door_timer - 1;
+                IF door_timer = 0 THEN
                     next_state <= IDLE;
                     door_timer <= 0;
                 END IF;
